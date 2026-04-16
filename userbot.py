@@ -1,7 +1,6 @@
 import asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-
 from utils import load
 
 userbots = {}
@@ -26,31 +25,55 @@ async def start_userbot(sid, session, api_id, api_hash):
     # ================= .stats =================
     @client.on(events.NewMessage(pattern=r"\.stats"))
     async def stats(event):
-        await event.reply(f"📊 Active Session ID: {sid}")
+        await event.reply(f"📊 Session ID: {sid}")
 
 
-    # ================= .b BROADCAST =================
+    # ================= .b BROADCAST (FIXED) =================
     @client.on(events.NewMessage(pattern=r"\.b (.+)"))
     async def broadcast(event):
         msg = event.pattern_match.group(1)
 
         data = load()
-        dp = float(data.get("settings", {}).get("dp", 0.5))
+        settings = data.get("settings", {})
+
+        delay = int(settings.get("delay", 3))
+        dp = float(settings.get("dp", 0))
+        max_send = int(settings.get("max", 999))
+        batch = settings.get("batch", False)
+
+        final_delay = delay + dp
 
         count = 0
 
-        async for chat in client.iter_dialogs():
-            try:
-                await client.send_message(chat.id, msg)
+        if batch:
+            tasks = []
+
+            async for chat in client.iter_dialogs():
+                if count >= max_send:
+                    break
+
+                tasks.append(client.send_message(chat.id, msg))
                 count += 1
-                await asyncio.sleep(dp)
-            except:
-                continue
+
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(final_delay)
+
+        else:
+            async for chat in client.iter_dialogs():
+                if count >= max_send:
+                    break
+
+                try:
+                    await client.send_message(chat.id, msg)
+                    count += 1
+                    await asyncio.sleep(final_delay)
+                except:
+                    continue
 
         await event.reply(f"📢 Sent to {count} chats")
 
 
-    # ================= AUTO LOOP =================
+    # ================= AUTO LOOP (FIXED ROTATION) =================
     asyncio.create_task(auto_broadcast_loop(client))
 
     return client
@@ -58,6 +81,8 @@ async def start_userbot(sid, session, api_id, api_hash):
 
 # ================= AUTO BROADCAST LOOP =================
 async def auto_broadcast_loop(client):
+    i = 0
+
     while True:
         data = load()
         settings = data.get("settings", {})
@@ -66,22 +91,45 @@ async def auto_broadcast_loop(client):
             await asyncio.sleep(5)
             continue
 
-        msg = settings.get("auto_msg", "Hello")
-        dp = float(settings.get("dp", 0.5))
-        delay = int(settings.get("delay", 10))
+        msgs = settings.get("broadcast_msgs", [])
+        delay = int(settings.get("delay", 3))
+        dp = float(settings.get("dp", 0))
+        max_send = int(settings.get("max", 999))
+        batch = settings.get("batch", False)
+
+        if not msgs:
+            await asyncio.sleep(5)
+            continue
+
+        msg = msgs[i % len(msgs)]
+        i += 1
+
+        final_delay = delay + dp
 
         count = 0
 
-        try:
+        if batch:
+            tasks = []
+
             async for chat in client.iter_dialogs():
+                if count >= max_send:
+                    break
+
+                tasks.append(client.send_message(chat.id, msg))
+                count += 1
+
+            await asyncio.gather(*tasks)
+        else:
+            async for chat in client.iter_dialogs():
+                if count >= max_send:
+                    break
+
                 try:
                     await client.send_message(chat.id, msg)
                     count += 1
-                    await asyncio.sleep(dp)
+                    await asyncio.sleep(final_delay)
                 except:
                     continue
-        except:
-            pass
 
         print(f"📢 Auto sent {count} chats")
 
