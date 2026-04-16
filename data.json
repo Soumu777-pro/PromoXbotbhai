@@ -4,6 +4,7 @@
   "settings": {
     "auto": false,
     "auto_msg": "Hello",
-    "delay": 5
+    "delay": 10,
+    "dp": 0.5
   }
 }
