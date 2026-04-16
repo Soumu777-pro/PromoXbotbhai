@@ -1,6 +1,5 @@
 import asyncio
 from telethon import TelegramClient, events
-
 from config import API_ID, API_HASH, BOT_TOKEN, OWNER_ID
 from utils import load, save
 from userbot import start_userbot, stop_all, clients
@@ -9,7 +8,6 @@ bot = TelegramClient("bot", API_ID, API_HASH)
 
 login_state = {}
 
-# ---------------- SUDO ----------------
 def is_sudo(uid):
     data = load()
     return uid == OWNER_ID or uid in data.get("sudo", [])
@@ -29,14 +27,15 @@ async def help(event):
 /on
 /off
 .auto on/off
-.delay <sec>
-.dp <sec>
-/sudo add/remove/list
 .setmsg <text>
 /b (reply)
+.delay
+.dp
+.max
+.batch on/off
 """)
 
-# ---------------- LOGIN SYSTEM ----------------
+# ---------------- LOGIN (UNCHANGED CORE) ----------------
 @bot.on(events.NewMessage(pattern="/login"))
 async def login(event):
     login_state[event.sender_id] = {"step": "phone"}
@@ -89,13 +88,12 @@ async def login_flow(event):
         await event.reply(f"✅ Saved {sid}")
         login_state.pop(uid)
 
-# ---------------- SESSION LIST ----------------
+# ---------------- SESSION ----------------
 @bot.on(events.NewMessage(pattern="/list"))
 async def list_sessions(event):
     data = load()
     await event.reply(str(data["sessions"]))
 
-# ---------------- ACTIVE ----------------
 @bot.on(events.NewMessage(pattern=r"/active (\d+)"))
 async def active(event):
     if not is_sudo(event.sender_id):
@@ -110,7 +108,6 @@ async def active(event):
     await start_userbot(sid, data["sessions"][sid]["session"], API_ID, API_HASH)
     await event.reply("🔥 Started")
 
-# ---------------- ON ----------------
 @bot.on(events.NewMessage(pattern="/on"))
 async def on(event):
     if not is_sudo(event.sender_id):
@@ -124,7 +121,6 @@ async def on(event):
 
     await event.reply("✅ ON")
 
-# ---------------- OFF ----------------
 @bot.on(events.NewMessage(pattern="/off"))
 async def off(event):
     if not is_sudo(event.sender_id):
@@ -170,7 +166,7 @@ async def clear(event):
     save(data)
     await event.reply("🗑 Cleared")
 
-# ---------------- INSTANT BROADCAST ----------------
+# ---------------- /b BROADCAST ----------------
 @bot.on(events.NewMessage(pattern="/b"))
 async def broadcast(event):
     if not is_sudo(event.sender_id):
@@ -192,6 +188,43 @@ async def broadcast(event):
                 continue
 
     await event.reply(f"⚡ Sent {count}")
+
+# ---------------- CONTROL COMMANDS ----------------
+@bot.on(events.NewMessage(pattern=r"\.delay (\d+)"))
+async def delay(event):
+    if not is_sudo(event.sender_id):
+        return
+    data = load()
+    data["settings"]["delay"] = int(event.pattern_match.group(1))
+    save(data)
+    await event.reply("⏱ Updated")
+
+@bot.on(events.NewMessage(pattern=r"\.dp ([0-9.]+)"))
+async def dp(event):
+    if not is_sudo(event.sender_id):
+        return
+    data = load()
+    data["settings"]["dp"] = float(event.pattern_match.group(1))
+    save(data)
+    await event.reply("⚡ DP updated")
+
+@bot.on(events.NewMessage(pattern=r"\.max (\d+)"))
+async def maxx(event):
+    if not is_sudo(event.sender_id):
+        return
+    data = load()
+    data["settings"]["max"] = int(event.pattern_match.group(1))
+    save(data)
+    await event.reply("📦 Max set")
+
+@bot.on(events.NewMessage(pattern=r"\.batch (on|off)"))
+async def batch(event):
+    if not is_sudo(event.sender_id):
+        return
+    data = load()
+    data["settings"]["batch"] = event.pattern_match.group(1) == "on"
+    save(data)
+    await event.reply("⚙ Batch updated")
 
 # ---------------- MAIN ----------------
 async def main():
