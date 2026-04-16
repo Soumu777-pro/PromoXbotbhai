@@ -1,0 +1,9 @@
+{
+  "sessions": {},
+  "sudo": [],
+  "settings": {
+    "auto": false,
+    "auto_msg": "Hello",
+    "delay": 5
+  }
+}
