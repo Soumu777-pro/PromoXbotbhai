@@ -1,35 +1,25 @@
+import asyncio
 from telethon import TelegramClient, events
-from telethon.sessions import StringSession
 
 from config import API_ID, API_HASH, BOT_TOKEN, OWNER_ID
 from utils import load, save
-from userbot import start_userbot, stop_all
+from userbot import start_userbot, stop_all, clients
 
 bot = TelegramClient("bot", API_ID, API_HASH)
 
-print("🔥 BOT SCRIPT LOADED")
-
-# ================= START BOT =================
-async def start_bot():
-    await bot.start(bot_token=BOT_TOKEN)
-    print("🚀 BOT STARTED SUCCESSFULLY")
-
-import asyncio
-asyncio.get_event_loop().create_task(start_bot())
-
 login_state = {}
 
-# ================= SUDO CHECK =================
+# ---------------- SUDO ----------------
 def is_sudo(uid):
     data = load()
     return uid == OWNER_ID or uid in data.get("sudo", [])
 
-# ================= START =================
+# ---------------- START ----------------
 @bot.on(events.NewMessage(pattern="/start"))
 async def start(event):
     await event.reply("🔥 Bot Online")
 
-# ================= HELP =================
+# ---------------- HELP ----------------
 @bot.on(events.NewMessage(pattern="/help"))
 async def help(event):
     await event.reply("""
@@ -42,13 +32,15 @@ async def help(event):
 .delay <sec>
 .dp <sec>
 /sudo add/remove/list
+.setmsg <text>
+/b (reply)
 """)
 
-# ================= LOGIN =================
+# ---------------- LOGIN SYSTEM ----------------
 @bot.on(events.NewMessage(pattern="/login"))
 async def login(event):
     login_state[event.sender_id] = {"step": "phone"}
-    await event.reply("📱 Send phone number")
+    await event.reply("📱 Send phone")
 
 @bot.on(events.NewMessage)
 async def login_flow(event):
@@ -59,7 +51,6 @@ async def login_flow(event):
 
     state = login_state[uid]
 
-    # PHONE
     if state["step"] == "phone":
         phone = event.raw_text
 
@@ -77,23 +68,15 @@ async def login_flow(event):
 
         await event.reply("📩 OTP sent")
 
-    # OTP
     elif state["step"] == "otp":
         otp = event.raw_text
         client = state["client"]
 
         try:
-            await client.sign_in(
-                state["phone"],
-                otp,
-                phone_code_hash=state["hash"]
-            )
-        except Exception as e:
-            if "password" in str(e).lower():
-                state["step"] = "2fa"
-                await event.reply("🔐 Enter 2FA password")
-                return
-            await event.reply(f"❌ Error: {e}")
+            await client.sign_in(state["phone"], otp, phone_code_hash=state["hash"])
+        except:
+            state["step"] = "2fa"
+            await event.reply("🔐 2FA password?")
             return
 
         session = client.session.save()
@@ -101,179 +84,119 @@ async def login_flow(event):
 
         sid = str(len(data["sessions"]) + 1)
         data["sessions"][sid] = {"session": session, "active": False}
-
         save(data)
 
-        await event.reply(f"✅ Session saved {sid}")
+        await event.reply(f"✅ Saved {sid}")
         login_state.pop(uid)
 
-    # 2FA
-    elif state["step"] == "2fa":
-        password = event.raw_text
-        client = state["client"]
-
-        try:
-            await client.sign_in(password=password)
-        except Exception as e:
-            return await event.reply(f"❌ 2FA Error: {e}")
-
-        session = client.session.save()
-        data = load()
-
-        sid = str(len(data["sessions"]) + 1)
-        data["sessions"][sid] = {"session": session, "active": False}
-
-        save(data)
-
-        await event.reply(f"🔐 2FA Done → {sid}")
-        login_state.pop(uid)
-
-# ================= LIST =================
+# ---------------- SESSION LIST ----------------
 @bot.on(events.NewMessage(pattern="/list"))
 async def list_sessions(event):
     data = load()
+    await event.reply(str(data["sessions"]))
 
-    msg = ""
-    for k, v in data.get("sessions", {}).items():
-        msg += f"{k}. Active={v['active']}\n"
-
-    await event.reply(msg or "No sessions")
-
-# ================= ACTIVE =================
+# ---------------- ACTIVE ----------------
 @bot.on(events.NewMessage(pattern=r"/active (\d+)"))
 async def active(event):
     if not is_sudo(event.sender_id):
-        return await event.reply("❌ Not allowed")
+        return
 
     sid = event.pattern_match.group(1)
     data = load()
 
-    if sid not in data["sessions"]:
-        return await event.reply("❌ Invalid session")
-
     data["sessions"][sid]["active"] = True
     save(data)
 
-    await start_userbot(
-        sid,
-        data["sessions"][sid]["session"],
-        API_ID,
-        API_HASH
-    )
+    await start_userbot(sid, data["sessions"][sid]["session"], API_ID, API_HASH)
+    await event.reply("🔥 Started")
 
-    await event.reply(f"🔥 Session {sid} started")
-
-# ================= ON =================
+# ---------------- ON ----------------
 @bot.on(events.NewMessage(pattern="/on"))
-async def on_all(event):
+async def on(event):
     if not is_sudo(event.sender_id):
-        return await event.reply("❌ Not allowed")
+        return
 
     data = load()
 
-    for sid, s in data.get("sessions", {}).items():
+    for sid, s in data["sessions"].items():
         if s["active"]:
             await start_userbot(sid, s["session"], API_ID, API_HASH)
 
-    await event.reply("✅ All ON")
+    await event.reply("✅ ON")
 
-# ================= OFF =================
+# ---------------- OFF ----------------
 @bot.on(events.NewMessage(pattern="/off"))
-async def off_all(event):
-    if not is_sudo(event.sender_id):
-        return await event.reply("❌ Not allowed")
-
-    await stop_all()
-    await event.reply("🛑 All OFF")
-
-# ================= AUTO BROADCAST =================
-@bot.on(events.NewMessage(pattern=r"\.auto on"))
-async def auto_on(event):
+async def off(event):
     if not is_sudo(event.sender_id):
         return
 
+    await stop_all()
+    await event.reply("🛑 OFF")
+
+# ---------------- AUTO ----------------
+@bot.on(events.NewMessage(pattern=r"\.auto on"))
+async def auto_on(event):
     data = load()
     data["settings"]["auto"] = True
     save(data)
-
-    await event.reply("🔥 Auto Broadcast ON")
+    await event.reply("🔥 Auto ON")
 
 @bot.on(events.NewMessage(pattern=r"\.auto off"))
 async def auto_off(event):
-    if not is_sudo(event.sender_id):
-        return
-
     data = load()
     data["settings"]["auto"] = False
     save(data)
+    await event.reply("🛑 Auto OFF")
 
-    await event.reply("🛑 Auto Broadcast OFF")
-
-# ================= DELAY =================
-@bot.on(events.NewMessage(pattern=r"\.delay (\d+)"))
-async def set_delay(event):
+# ---------------- SET MSG ----------------
+@bot.on(events.NewMessage(pattern=r"\.setmsg (.+)"))
+async def setmsg(event):
     if not is_sudo(event.sender_id):
         return
 
-    val = int(event.pattern_match.group(1))
+    msg = event.pattern_match.group(1)
     data = load()
 
-    data["settings"]["delay"] = val
+    data["settings"]["broadcast_msgs"].append(msg)
     save(data)
 
-    await event.reply(f"⏱ Delay set {val}s")
+    await event.reply("✅ Added")
 
-# ================= DP =================
-@bot.on(events.NewMessage(pattern=r"\.dp ([0-9.]+)"))
-async def set_dp(event):
-    if not is_sudo(event.sender_id):
-        return
-
-    val = float(event.pattern_match.group(1))
+# ---------------- CLEAR MSG ----------------
+@bot.on(events.NewMessage(pattern=r"\.clearmsg"))
+async def clear(event):
     data = load()
-
-    data["settings"]["dp"] = val
+    data["settings"]["broadcast_msgs"] = []
     save(data)
+    await event.reply("🗑 Cleared")
 
-    await event.reply(f"⚡ DP set {val}s")
-
-# ================= SUDO =================
-@bot.on(events.NewMessage(pattern=r"/sudo add (\d+)"))
-async def sudo_add(event):
-    if event.sender_id != OWNER_ID:
-        return
-
-    uid = int(event.pattern_match.group(1))
-    data = load()
-
-    if uid not in data["sudo"]:
-        data["sudo"].append(uid)
-        save(data)
-
-    await event.reply(f"✅ Added sudo {uid}")
-
-@bot.on(events.NewMessage(pattern=r"/sudo remove (\d+)"))
-async def sudo_remove(event):
-    if event.sender_id != OWNER_ID:
-        return
-
-    uid = int(event.pattern_match.group(1))
-    data = load()
-
-    if uid in data["sudo"]:
-        data["sudo"].remove(uid)
-        save(data)
-
-    await event.reply(f"🗑 Removed sudo {uid}")
-
-@bot.on(events.NewMessage(pattern="/sudo list"))
-async def sudo_list(event):
+# ---------------- INSTANT BROADCAST ----------------
+@bot.on(events.NewMessage(pattern="/b"))
+async def broadcast(event):
     if not is_sudo(event.sender_id):
         return
 
-    data = load()
-    await event.reply("\n".join(map(str, data.get("sudo", []))) or "Empty")
+    if not event.is_reply:
+        return await event.reply("Reply to message")
 
-# ================= RUN =================
-print("🚀 EVENT LOOP RUNNING")
-bot.run_until_disconnected()
+    msg = (await event.get_reply_message()).text
+
+    count = 0
+
+    for c in clients.values():
+        async for d in c.iter_dialogs():
+            try:
+                await c.send_message(d.id, msg)
+                count += 1
+            except:
+                continue
+
+    await event.reply(f"⚡ Sent {count}")
+
+# ---------------- MAIN ----------------
+async def main():
+    await bot.start(bot_token=BOT_TOKEN)
+    print("🔥 BOT STARTED")
+    await bot.run_until_disconnected()
+
+asyncio.run(main())
