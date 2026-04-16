@@ -5,22 +5,29 @@ from config import API_ID, API_HASH, BOT_TOKEN, OWNER_ID
 from utils import load, save
 from userbot import start_userbot, stop_all
 
-bot = TelegramClient("bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+bot = TelegramClient("bot", API_ID, API_HASH)
+
+print("🔥 BOT SCRIPT LOADED")
+
+# ================= START BOT =================
+async def start_bot():
+    await bot.start(bot_token=BOT_TOKEN)
+    print("🚀 BOT STARTED SUCCESSFULLY")
+
+import asyncio
+asyncio.get_event_loop().create_task(start_bot())
 
 login_state = {}
-
 
 # ================= SUDO CHECK =================
 def is_sudo(uid):
     data = load()
     return uid == OWNER_ID or uid in data.get("sudo", [])
 
-
 # ================= START =================
 @bot.on(events.NewMessage(pattern="/start"))
 async def start(event):
     await event.reply("🔥 Bot Online")
-
 
 # ================= HELP =================
 @bot.on(events.NewMessage(pattern="/help"))
@@ -37,13 +44,11 @@ async def help(event):
 /sudo add/remove/list
 """)
 
-
 # ================= LOGIN =================
 @bot.on(events.NewMessage(pattern="/login"))
 async def login(event):
     login_state[event.sender_id] = {"step": "phone"}
     await event.reply("📱 Send phone number")
-
 
 @bot.on(events.NewMessage)
 async def login_flow(event):
@@ -123,7 +128,6 @@ async def login_flow(event):
         await event.reply(f"🔐 2FA Done → {sid}")
         login_state.pop(uid)
 
-
 # ================= LIST =================
 @bot.on(events.NewMessage(pattern="/list"))
 async def list_sessions(event):
@@ -134,7 +138,6 @@ async def list_sessions(event):
         msg += f"{k}. Active={v['active']}\n"
 
     await event.reply(msg or "No sessions")
-
 
 # ================= ACTIVE =================
 @bot.on(events.NewMessage(pattern=r"/active (\d+)"))
@@ -160,7 +163,6 @@ async def active(event):
 
     await event.reply(f"🔥 Session {sid} started")
 
-
 # ================= ON =================
 @bot.on(events.NewMessage(pattern="/on"))
 async def on_all(event):
@@ -175,7 +177,6 @@ async def on_all(event):
 
     await event.reply("✅ All ON")
 
-
 # ================= OFF =================
 @bot.on(events.NewMessage(pattern="/off"))
 async def off_all(event):
@@ -184,7 +185,6 @@ async def off_all(event):
 
     await stop_all()
     await event.reply("🛑 All OFF")
-
 
 # ================= AUTO BROADCAST =================
 @bot.on(events.NewMessage(pattern=r"\.auto on"))
@@ -198,7 +198,6 @@ async def auto_on(event):
 
     await event.reply("🔥 Auto Broadcast ON")
 
-
 @bot.on(events.NewMessage(pattern=r"\.auto off"))
 async def auto_off(event):
     if not is_sudo(event.sender_id):
@@ -209,7 +208,6 @@ async def auto_off(event):
     save(data)
 
     await event.reply("🛑 Auto Broadcast OFF")
-
 
 # ================= DELAY =================
 @bot.on(events.NewMessage(pattern=r"\.delay (\d+)"))
@@ -225,7 +223,6 @@ async def set_delay(event):
 
     await event.reply(f"⏱ Delay set {val}s")
 
-
 # ================= DP =================
 @bot.on(events.NewMessage(pattern=r"\.dp ([0-9.]+)"))
 async def set_dp(event):
@@ -239,7 +236,6 @@ async def set_dp(event):
     save(data)
 
     await event.reply(f"⚡ DP set {val}s")
-
 
 # ================= SUDO =================
 @bot.on(events.NewMessage(pattern=r"/sudo add (\d+)"))
@@ -256,7 +252,6 @@ async def sudo_add(event):
 
     await event.reply(f"✅ Added sudo {uid}")
 
-
 @bot.on(events.NewMessage(pattern=r"/sudo remove (\d+)"))
 async def sudo_remove(event):
     if event.sender_id != OWNER_ID:
@@ -271,7 +266,6 @@ async def sudo_remove(event):
 
     await event.reply(f"🗑 Removed sudo {uid}")
 
-
 @bot.on(events.NewMessage(pattern="/sudo list"))
 async def sudo_list(event):
     if not is_sudo(event.sender_id):
@@ -279,3 +273,7 @@ async def sudo_list(event):
 
     data = load()
     await event.reply("\n".join(map(str, data.get("sudo", []))) or "Empty")
+
+# ================= RUN =================
+print("🚀 EVENT LOOP RUNNING")
+bot.run_until_disconnected()
